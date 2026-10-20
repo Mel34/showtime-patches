@@ -1,0 +1,43 @@
+--- a/showtime/widgets/window.py
++++ b/showtime/widgets/window.py
+@@ -62,6 +62,7 @@
+ 
+ # So that seeking isn't too rough
+ SCALE_MULT = 500
++SEEK_STEP_NS = 5_000_000_000
+ 
+ MINUTE_IN_NS = 6e10
+ 
+@@ -277,6 +278,12 @@
+ 
+         self._create_actions()
+ 
++        seek_scroll = Gtk.EventControllerScroll.new(
++            Gtk.EventControllerScrollFlags.VERTICAL
++        )
++        seek_scroll.connect("scroll", self._on_seek_scroll)
++        self.seek_scale.add_controller(seek_scroll)
++
+     def do_size_allocate(self, width: int, height: int, baseline: int) -> None:
+         """Call to set the allocation, if the widget does not have a layout manager."""
+         Adw.ApplicationWindow.do_size_allocate(self, width, height, baseline)
+@@ -673,6 +680,19 @@
+         self.position_label.props.label = nanoseconds_to_timestamp(pos)
+         self._set_end_timestamp_label(pos, dur)
+ 
++    def _on_seek_scroll(
++        self, _controller, _dx: float, dy: float
++    ) -> bool:
++        duration = self.play.props.duration
++        if duration <= 0 or dy == 0:
++            return True
++
++        position = self.play.props.position
++        delta = -SEEK_STEP_NS if dy > 0 else SEEK_STEP_NS
++        self.play.seek(min(max(position + delta, 0), duration))
++        self.emit("seeked")
++        return True
++
+     @Gtk.Template.Callback()
+     def _seek(self, _obj, _scroll, val: float) -> None:
+         if not self._seeking:

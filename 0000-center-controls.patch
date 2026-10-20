@@ -1,0 +1,185 @@
+diff --git a/showtime/gtk/style.css b/showtime/gtk/style.css
+index 2b97618..41ae6a6 100644
+--- a/showtime/gtk/style.css
++++ b/showtime/gtk/style.css
+@@ -34,14 +34,9 @@ scale.highlighted slider:active {
+   transform: scale(0.9);
+ }
+ 
+-#play-button:active > image {
+-  transform: scale(0.5);
+-}
+-
+ button.highlighted > *,
+ menubutton.highlighted > button > *,
+ windowcontrols.overlaid > button > image,
+-#play-button > image,
+ scale.highlighted slider {
+   transition: transform 0.2s;
+ }
+@@ -62,18 +57,6 @@ windowcontrols.overlaid > button > image {
+     drop-shadow(0 0 9px alpha(black, 0.3));
+ }
+ 
+-#play-button > image {
+-  filter: drop-shadow(0 0 1px alpha(black, 0.5))
+-    drop-shadow(0 0 3px alpha(black, 0.1))
+-    drop-shadow(0 0 6px alpha(black, 0.2));
+-}
+-
+-#backwards-button > image,
+-#forwards-button > image {
+-  filter: drop-shadow(0 0 1px alpha(black, 0.5))
+-    drop-shadow(0 0 6px alpha(black, 0.4));
+-}
+-
+ scale.overlaid {
+   color: white;
+   filter: drop-shadow(0 0 6px alpha(black, 0.3));
+@@ -107,11 +90,6 @@ scale.overlaid slider {
+   padding: 0.1em 0.6em 0.1em 0.8em;
+ }
+ 
+-#play-button image {
+-  -gtk-icon-size: 32px;
+-  padding: 12px;
+-}
+-
+ #bottom-overlay-box {
+   margin-bottom: -6px;
+ }
+diff --git a/showtime/gtk/window.blp b/showtime/gtk/window.blp
+index bae754c..a622155 100644
+--- a/showtime/gtk/window.blp
++++ b/showtime/gtk/window.blp
+@@ -132,58 +132,6 @@ template $Window: Adw.ApplicationWindow {
+                   valign: center;
+                   margin-top: 48;
+ 
+-                  Button {
+-                    name: "backwards-button";
+-                    valign: center;
+-                    icon-name: "skip-backwards-10-symbolic";
+-                    action-name: "win.backwards";
+-
+-                    accessibility {
+-                      label: _("Go Back 10 Seconds");
+-                    }
+-
+-                    styles [
+-                      "circular",
+-                      "highlighted",
+-                      "overlaid",
+-                    ]
+-                  }
+-
+-                  Button play_button {
+-                    name: "play-button";
+-                    margin-start: 12;
+-                    margin-end: 12;
+-                    valign: center;
+-                    icon-name: bind $_get_play_icon(template.paused) as <string>;
+-                    action-name: "win.toggle-playback";
+-
+-                    accessibility {
+-                      label: _("Play");
+-                    }
+-
+-                    styles [
+-                      "circular",
+-                      "highlighted",
+-                      "overlaid",
+-                    ]
+-                  }
+-
+-                  Button {
+-                    name: "forwards-button";
+-                    valign: center;
+-                    icon-name: "skip-forward-10-symbolic";
+-                    action-name: "win.forwards";
+-
+-                    accessibility {
+-                      label: _("Go Forward 10 Seconds");
+-                    }
+-
+-                    styles [
+-                      "circular",
+-                      "highlighted",
+-                      "overlaid",
+-                    ]
+-                  }
+                 }
+ 
+                 Box bottom_overlay_box {
+diff --git a/showtime/widgets/window.py b/showtime/widgets/window.py
+--- a/showtime/widgets/window.py
++++ b/showtime/widgets/window.py
+@@ -97,7 +97,6 @@
+     bottom_overlay_box: Gtk.Box = Gtk.Template.Child()
+ 
+     title_label: Gtk.Label = Gtk.Template.Child()
+-    play_button: Gtk.Button = Gtk.Template.Child()
+     position_label: Gtk.Label = Gtk.Template.Child()
+     seek_scale: Gtk.Scale = Gtk.Template.Child()
+     timestamp_box: Gtk.Box = Gtk.Template.Child()
+@@ -177,15 +176,6 @@
+ 
+         self._paused = paused
+ 
+-        self.play_button.update_property(
+-            (Gtk.AccessibleProperty.LABEL,),
+-            (_("Play") if paused else _("Pause"),),
+-        )
+-        self.play_button.props.icon_name = (
+-            "media-playback-start-symbolic"
+-            if paused
+-            else "media-playback-pause-symbolic"
+-        )
+ 
+         if not (app := self.props.application):
+             return
+@@ -197,6 +187,7 @@
+ 
+         Gtk.WindowGroup().add_window(self)
+ 
++        self._click_timeout_id = 0
+         self._reveal_animations = {}
+         self._hide_animations = {}
+ 
+@@ -864,7 +855,21 @@
+         gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+         self._on_motion()
+ 
+-        if not n % 2:
++        if self._click_timeout_id:
++            GLib.source_remove(self._click_timeout_id)
++            self._click_timeout_id = 0
++
++        if n == 1:
++            settings = Gtk.Settings.get_default()
++            delay = settings.props.gtk_double_click_time if settings else 250
++
++            def _trigger_play_pause():
++                self._click_timeout_id = 0
++                self.activate_action("win.toggle-playback", None)
++                return GLib.SOURCE_REMOVE
++
++            self._click_timeout_id = GLib.timeout_add(delay, _trigger_play_pause)
++        elif n == 2:
+             self.props.fullscreened = not self.props.fullscreened
+ 
+     @Gtk.Template.Callback()
+@@ -880,13 +885,6 @@
+         cast("Application", app).do_activate(self._playing_gfile)
+         self.close()
+ 
+-    @Gtk.Template.Callback()
+-    def _get_play_icon(self, _obj, paused: bool) -> str:
+-        return (
+-            "media-playback-start-symbolic"
+-            if paused
+-            else "media-playback-pause-symbolic"
+-        )
+ 
+     @Gtk.Template.Callback()
+     def _get_fullscreen_icon(self, _obj, fullscreened: bool) -> str:

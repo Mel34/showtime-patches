@@ -1,0 +1,37 @@
+--- a/showtime/widgets/window.py
++++ b/showtime/widgets/window.py
+@@ -284,6 +284,13 @@
+         seek_scroll.connect("scroll", self._on_seek_scroll)
+         self.seek_scale.add_controller(seek_scroll)
+ 
++        volume_scroll = Gtk.EventControllerScroll.new(
++            Gtk.EventControllerScrollFlags.VERTICAL
++        )
++        volume_scroll.set_propagation_phase(Gtk.PropagationPhase.BUBBLE)
++        volume_scroll.connect("scroll", self._on_volume_scroll)
++        self.add_controller(volume_scroll)
++
+     def do_size_allocate(self, width: int, height: int, baseline: int) -> None:
+         """Call to set the allocation, if the widget does not have a layout manager."""
+         Adw.ApplicationWindow.do_size_allocate(self, width, height, baseline)
+@@ -680,6 +687,20 @@
+         self.position_label.props.label = nanoseconds_to_timestamp(pos)
+         self._set_end_timestamp_label(pos, dur)
+ 
++    def _on_volume_scroll(
++        self, _controller, _dx: float, dy: float
++    ) -> bool:
++        if dy == 0:
++            return False
++
++        volume = self.play.props.volume
++        if dy < 0:
++            self.play.set_volume(min(volume + 0.05, 1))
++        else:
++            self.play.set_volume(max(volume - 0.05, 0))
++
++        return True
++
+     def _on_seek_scroll(
+         self, _controller, _dx: float, dy: float
+     ) -> bool:
